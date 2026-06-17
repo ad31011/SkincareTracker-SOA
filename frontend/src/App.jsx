@@ -12,8 +12,6 @@ import Progress from './pages/Progress';
 import Users from './pages/Users';
 import Home from './pages/Home';
 
-
-
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading">Loading...</div>;
@@ -31,13 +29,10 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/home" element={<Home />} />
           <Route path="/" element={<Home />} />
-
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Navigate to="/dashboard" />} />
+          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="skinlogs" element={<SkinLogs />} />
             <Route path="routines" element={<Routines />} />
