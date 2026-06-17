@@ -57,7 +57,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
             "http://localhost:5173",
             "http://localhost:3000",
-            builder.Configuration["AllowedOrigin"] ?? "http://localhost:5173"
+            "https://skincare-tracker-soa.vercel.app"
         )
         .AllowAnyHeader()
         .AllowAnyMethod();
