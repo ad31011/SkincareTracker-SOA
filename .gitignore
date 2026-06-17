@@ -1,0 +1,17 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+publish/
+
+## Secrets
+appsettings.Development.json
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Node (if used for tooling)
+node_modules/
