@@ -54,9 +54,13 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy.WithOrigins(
+            "http://localhost:5173",
+            "http://localhost:3000",
+            builder.Configuration["AllowedOrigin"] ?? "http://localhost:5173"
+        )
+        .AllowAnyHeader()
+        .AllowAnyMethod();
     });
 });
 
