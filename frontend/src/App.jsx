@@ -10,6 +10,9 @@ import Routines from './pages/Routines';
 import SkinLogs from './pages/SkinLogs';
 import Progress from './pages/Progress';
 import Users from './pages/Users';
+import Home from './pages/Home';
+
+
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -28,6 +31,9 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/home" element={<Home />} />
+          <Route path="/" element={<Home />} />
+
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
