@@ -10,23 +10,17 @@ public class AuthService : IAuthService
 {
     private readonly IUserRepository _users;
     private readonly IConfiguration _config;
+
     public AuthService(IUserRepository users, IConfiguration config)
     {
-        _users = users; _config = config;
-    }
-
-    public async Task<string?> AuthenticateAsync(string email, string password)
-    {
-        var user = await _users.GetByEmailAsync(email);
-        if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
-            return null;
-        var key = _config["Jwt:Key"] ?? "SuperSecretSkincareTrackerKey2024!XYZ";
-        return JwtHelper.GenerateToken(user.Id, user.Email, user.Role, key);
+        _users = users;
+        _config = config;
     }
 
     public async Task<bool> RegisterAsync(string name, string email, string password, string skinType, string skinConcerns)
     {
         if (await _users.GetByEmailAsync(email) != null) return false;
+
         var user = new User
         {
             Name         = name,
@@ -39,12 +33,52 @@ public class AuthService : IAuthService
         await _users.CreateAsync(user);
         return true;
     }
+
+    public async Task<AuthResponseDto?> LoginAsync(string email, string password)
+    {
+        var user = await _users.GetByEmailAsync(email);
+        if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            return null;
+
+        var key   = _config["Jwt:Key"] ?? "SuperSecretSkincareTrackerKey2024!XYZ";
+        var token = JwtHelper.GenerateToken(user.Id, user.Email, user.Role, key);
+        return new AuthResponseDto(token, user.Name, user.Email, user.Role, user.Id);
+    }
+
+    public async Task<UserDto?> GetCurrentUserAsync(int userId)
+    {
+        var user = await _users.GetByIdAsync(userId);
+        if (user == null) return null;
+        return new UserDto(user.Id, user.Name, user.Email, user.Role, user.SkinType, user.SkinConcerns, user.CreatedAt);
+    }
+}
+
+// ── User Service ──────────────────────────────────────────────────────────────
+public class UserService : IUserService
+{
+    private readonly IUserRepository _users;
+
+    public UserService(IUserRepository users) => _users = users;
+
+    public async Task<IEnumerable<UserDto>> GetAllAsync()
+    {
+        var users = await _users.GetAllAsync();
+        return users.Select(u => new UserDto(
+            u.Id, u.Name, u.Email, u.Role,
+            u.SkinType, u.SkinConcerns, u.CreatedAt));
+    }
+
+    public async Task DeleteAsync(int id)
+    {
+        await _users.DeleteAsync(id);
+    }
 }
 
 // ── Product Service ───────────────────────────────────────────────────────────
 public class ProductService : IProductService
 {
     private readonly IProductRepository _repo;
+
     public ProductService(IProductRepository repo) => _repo = repo;
 
     public async Task<IEnumerable<ProductDto>> GetAllAsync()
@@ -106,6 +140,7 @@ public class ProductService : IProductService
 public class IngredientService : IIngredientService
 {
     private readonly IIngredientRepository _repo;
+
     public IngredientService(IIngredientRepository repo) => _repo = repo;
 
     public async Task<IEnumerable<IngredientDto>> GetAllAsync()
@@ -122,7 +157,7 @@ public class IngredientService : IIngredientService
 
     public async Task<IngredientDto> CreateAsync(CreateIngredientDto dto)
     {
-        var i = new Ingredient { Name = dto.Name, ConflictsWith = dto.ConflictsWith, Notes = dto.Notes };
+        var i       = new Ingredient { Name = dto.Name, ConflictsWith = dto.ConflictsWith, Notes = dto.Notes };
         var created = await _repo.CreateAsync(i);
         return new IngredientDto(created.Id, created.Name, created.ConflictsWith, created.Notes);
     }
@@ -139,13 +174,15 @@ public class IngredientService : IIngredientService
 // ── Routine Service ───────────────────────────────────────────────────────────
 public class RoutineService : IRoutineService
 {
-    private readonly IRoutineRepository _repo;
+    private readonly IRoutineRepository    _repo;
     private readonly IIngredientRepository _ingredients;
-    private readonly IProductRepository _products;
+    private readonly IProductRepository    _products;
 
     public RoutineService(IRoutineRepository repo, IIngredientRepository ingredients, IProductRepository products)
     {
-        _repo = repo; _ingredients = ingredients; _products = products;
+        _repo        = repo;
+        _ingredients = ingredients;
+        _products    = products;
     }
 
     public async Task<IEnumerable<RoutineDto>> GetByUserAsync(int userId)
@@ -164,9 +201,9 @@ public class RoutineService : IRoutineService
     {
         var routine = new Routine
         {
-            UserId    = userId,
-            Name      = dto.Name,
-            TimeOfDay = dto.TimeOfDay,
+            UserId     = userId,
+            Name       = dto.Name,
+            TimeOfDay  = dto.TimeOfDay,
             DaysOfWeek = dto.DaysOfWeek
         };
         var created = await _repo.CreateAsync(routine);
@@ -179,10 +216,10 @@ public class RoutineService : IRoutineService
     {
         var routine = await _repo.GetByIdAsync(id);
         if (routine == null || routine.UserId != userId) return null;
-        routine.Name      = dto.Name;
-        routine.TimeOfDay = dto.TimeOfDay;
+        routine.Name       = dto.Name;
+        routine.TimeOfDay  = dto.TimeOfDay;
         routine.DaysOfWeek = dto.DaysOfWeek;
-        routine.IsActive  = dto.IsActive;
+        routine.IsActive   = dto.IsActive;
         await _repo.UpdateAsync(routine);
         await _repo.RemoveAllProductsAsync(id);
         foreach (var p in dto.Products)
@@ -208,19 +245,14 @@ public class RoutineService : IRoutineService
         if (routine == null) return new();
 
         var warnings = new List<ConflictWarningDto>();
-        var products = routine.RoutineProducts
-            .Select(rp => rp.Product)
-            .ToList();
+        var products = routine.RoutineProducts.Select(rp => rp.Product).ToList();
 
         for (int i = 0; i < products.Count; i++)
         {
             for (int j = i + 1; j < products.Count; j++)
             {
-                var p1 = products[i];
-                var p2 = products[j];
-
-                var p1Ingredients = p1.ProductIngredients.Select(pi => pi.Ingredient).ToList();
-                var p2Ingredients = p2.ProductIngredients.Select(pi => pi.Ingredient).ToList();
+                var p1Ingredients = products[i].ProductIngredients.Select(pi => pi.Ingredient).ToList();
+                var p2Ingredients = products[j].ProductIngredients.Select(pi => pi.Ingredient).ToList();
 
                 foreach (var ing1 in p1Ingredients)
                 {
@@ -232,8 +264,8 @@ public class RoutineService : IRoutineService
                         if (conflicts.Contains(ing2.Name, StringComparer.OrdinalIgnoreCase))
                         {
                             warnings.Add(new ConflictWarningDto(
-                                p1.Name, p2.Name, ing1.Name,
-                                $"'{ing1.Name}' in {p1.Name} conflicts with '{ing2.Name}' in {p2.Name}. Consider using them in separate routines."));
+                                products[i].Name, products[j].Name, ing1.Name,
+                                $"'{ing1.Name}' in {products[i].Name} conflicts with '{ing2.Name}' in {products[j].Name}. Consider using them in separate routines."));
                         }
                     }
                 }
@@ -245,7 +277,9 @@ public class RoutineService : IRoutineService
     private static RoutineDto ToDto(Routine r) => new(
         r.Id, r.Name, r.TimeOfDay, r.DaysOfWeek, r.IsActive,
         r.RoutineProducts.OrderBy(rp => rp.StepOrder)
-            .Select(rp => new RoutineProductDto(rp.ProductId, rp.Product.Name, rp.Product.Brand, rp.Product.Category, rp.StepOrder))
+            .Select(rp => new RoutineProductDto(
+                rp.ProductId, rp.Product.Name, rp.Product.Brand,
+                rp.Product.Category, rp.StepOrder))
             .ToList());
 }
 
@@ -253,6 +287,7 @@ public class RoutineService : IRoutineService
 public class SkinLogService : ISkinLogService
 {
     private readonly ISkinLogRepository _repo;
+
     public SkinLogService(ISkinLogRepository repo) => _repo = repo;
 
     public async Task<IEnumerable<SkinLogDto>> GetByUserAsync(int userId)
@@ -271,14 +306,14 @@ public class SkinLogService : ISkinLogService
     {
         var log = new SkinLog
         {
-            UserId              = userId,
-            Date                = dto.Date,
-            SkinConditionScore  = dto.SkinConditionScore,
-            Hydration           = dto.Hydration,
-            Oiliness            = dto.Oiliness,
-            Sensitivity         = dto.Sensitivity,
-            Notes               = dto.Notes,
-            ProductsUsed        = dto.ProductsUsed
+            UserId             = userId,
+            Date               = dto.Date,
+            SkinConditionScore = dto.SkinConditionScore,
+            Hydration          = dto.Hydration,
+            Oiliness           = dto.Oiliness,
+            Sensitivity        = dto.Sensitivity,
+            Notes              = dto.Notes,
+            ProductsUsed       = dto.ProductsUsed
         };
         var created = await _repo.CreateAsync(log);
         return ToDto(created);
@@ -311,7 +346,8 @@ public class SkinLogService : ISkinLogService
     public async Task<List<SkinProgressDto>> GetProgressAsync(int userId, DateTime from, DateTime to)
     {
         var logs = await _repo.GetByUserIdAndRangeAsync(userId, from, to);
-        return logs.Select(l => new SkinProgressDto(l.Date, l.SkinConditionScore, l.Hydration, l.Oiliness, l.Sensitivity)).ToList();
+        return logs.Select(l => new SkinProgressDto(
+            l.Date, l.SkinConditionScore, l.Hydration, l.Oiliness, l.Sensitivity)).ToList();
     }
 
     /// <summary>
@@ -325,24 +361,20 @@ public class SkinLogService : ISkinLogService
 
         if (!days.Any()) return new StreakDto(0, 0, 0);
 
-        int current = 1, longest = 1, streak = 1;
+        int longest = 1, streak = 1;
         var today = DateTime.UtcNow.Date;
 
         for (int i = 1; i < days.Count; i++)
         {
-            if ((days[i] - days[i - 1]).TotalDays == 1)
-                streak++;
-            else
-                streak = 1;
+            streak = (days[i] - days[i - 1]).TotalDays == 1 ? streak + 1 : 1;
             if (streak > longest) longest = streak;
         }
 
-        // Current streak: only count if last log was today or yesterday
-        current = (today - days.Last()).TotalDays <= 1 ? streak : 0;
-
+        int current = (today - days.Last()).TotalDays <= 1 ? streak : 0;
         return new StreakDto(current, longest, days.Count);
     }
 
     private static SkinLogDto ToDto(SkinLog l) => new(
-        l.Id, l.Date, l.SkinConditionScore, l.Hydration, l.Oiliness, l.Sensitivity, l.Notes, l.ProductsUsed);
+        l.Id, l.Date, l.SkinConditionScore,
+        l.Hydration, l.Oiliness, l.Sensitivity, l.Notes, l.ProductsUsed);
 }

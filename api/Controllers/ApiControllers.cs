@@ -6,14 +6,15 @@ using System.Security.Claims;
 
 namespace SkincareTracker.API.Controllers;
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// ── Auth Controller ───────────────────────────────────────────────────────────
+// Injects ONLY: IAuthService
 [ApiController]
 [Route("api/auth")]
-public class AuthApiController : ControllerBase
+public class AuthController : ControllerBase
 {
     private readonly IAuthService _auth;
-    private readonly IUserRepository _users;
-    public AuthApiController(IAuthService auth, IUserRepository users) { _auth = auth; _users = users; }
+
+    public AuthController(IAuthService auth) => _auth = auth;
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
@@ -26,21 +27,19 @@ public class AuthApiController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        var token = await _auth.AuthenticateAsync(dto.Email, dto.Password);
-        if (token == null) return Unauthorized(new { message = "Invalid email or password." });
-        var user = await _users.GetByEmailAsync(dto.Email);
-        return Ok(new AuthResponseDto(token, user!.Name, user.Email, user.Role, user.Id));
+        var result = await _auth.LoginAsync(dto.Email, dto.Password);
+        if (result == null) return Unauthorized(new { message = "Invalid email or password." });
+        return Ok(result);
     }
 
     [HttpGet("me")]
     [Authorize]
     public async Task<IActionResult> Me()
     {
-        var id = GetUserId();
-        if (id == 0) return Unauthorized();
-        var user = await _users.GetByIdAsync(id);
-        if (user == null) return NotFound();
-        return Ok(new UserDto(user.Id, user.Name, user.Email, user.Role, user.SkinType, user.SkinConcerns, user.CreatedAt));
+        var userId = GetUserId();
+        if (userId == 0) return Unauthorized();
+        var user = await _auth.GetCurrentUserAsync(userId);
+        return user == null ? NotFound() : Ok(user);
     }
 
     private int GetUserId()
@@ -52,16 +51,16 @@ public class AuthApiController : ControllerBase
     }
 }
 
-// ── Products ──────────────────────────────────────────────────────────────────
+// ── Products Controller ───────────────────────────────────────────────────────
+// Injects ONLY: IProductService
 [ApiController]
 [Route("api/products")]
 [Authorize]
-public class ProductsApiController : ControllerBase
+public class ProductsController : ControllerBase
 {
     private readonly IProductService _products;
-    private readonly IIngredientService _ingredients;
-    public ProductsApiController(IProductService products, IIngredientService ingredients)
-    { _products = products; _ingredients = ingredients; }
+
+    public ProductsController(IProductService products) => _products = products;
 
     [HttpGet]
     public async Task<IActionResult> GetAll() => Ok(await _products.GetAllAsync());
@@ -95,40 +94,44 @@ public class ProductsApiController : ControllerBase
     }
 }
 
-// ── Ingredients ───────────────────────────────────────────────────────────────
+// ── Ingredients Controller ────────────────────────────────────────────────────
+// Injects ONLY: IIngredientService
 [ApiController]
 [Route("api/ingredients")]
 [Authorize]
-public class IngredientsApiController : ControllerBase
+public class IngredientsController : ControllerBase
 {
-    private readonly IIngredientService _service;
-    public IngredientsApiController(IIngredientService service) => _service = service;
+    private readonly IIngredientService _ingredients;
+
+    public IngredientsController(IIngredientService ingredients) => _ingredients = ingredients;
 
     [HttpGet]
-    public async Task<IActionResult> GetAll() => Ok(await _service.GetAllAsync());
+    public async Task<IActionResult> GetAll() => Ok(await _ingredients.GetAllAsync());
 
     [HttpPost]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create([FromBody] CreateIngredientDto dto)
-        => Ok(await _service.CreateAsync(dto));
+        => Ok(await _ingredients.CreateAsync(dto));
 
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(int id)
     {
-        var ok = await _service.DeleteAsync(id);
+        var ok = await _ingredients.DeleteAsync(id);
         return ok ? Ok() : NotFound();
     }
 }
 
-// ── Routines ──────────────────────────────────────────────────────────────────
+// ── Routines Controller ───────────────────────────────────────────────────────
+// Injects ONLY: IRoutineService
 [ApiController]
 [Route("api/routines")]
 [Authorize]
-public class RoutinesApiController : ControllerBase
+public class RoutinesController : ControllerBase
 {
     private readonly IRoutineService _routines;
-    public RoutinesApiController(IRoutineService routines) { _routines = routines; }
+
+    public RoutinesController(IRoutineService routines) => _routines = routines;
 
     private int GetUserId()
     {
@@ -172,14 +175,16 @@ public class RoutinesApiController : ControllerBase
         => Ok(await _routines.CheckConflictsAsync(id));
 }
 
-// ── Skin Logs ─────────────────────────────────────────────────────────────────
+// ── SkinLogs Controller ───────────────────────────────────────────────────────
+// Injects ONLY: ISkinLogService
 [ApiController]
 [Route("api/skinlogs")]
 [Authorize]
-public class SkinLogsApiController : ControllerBase
+public class SkinLogsController : ControllerBase
 {
-    private readonly ISkinLogService _service;
-    public SkinLogsApiController(ISkinLogService service) => _service = service;
+    private readonly ISkinLogService _skinLogs;
+
+    public SkinLogsController(ISkinLogService skinLogs) => _skinLogs = skinLogs;
 
     private int GetUserId()
     {
@@ -191,55 +196,52 @@ public class SkinLogsApiController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
-        => Ok(await _service.GetByUserAsync(GetUserId()));
+        => Ok(await _skinLogs.GetByUserAsync(GetUserId()));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateSkinLogDto dto)
-        => Ok(await _service.CreateAsync(GetUserId(), dto));
+        => Ok(await _skinLogs.CreateAsync(GetUserId(), dto));
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSkinLogDto dto)
     {
-        var result = await _service.UpdateAsync(id, GetUserId(), dto);
+        var result = await _skinLogs.UpdateAsync(id, GetUserId(), dto);
         return result == null ? NotFound() : Ok(result);
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var ok = await _service.DeleteAsync(id, GetUserId());
+        var ok = await _skinLogs.DeleteAsync(id, GetUserId());
         return ok ? Ok() : NotFound();
     }
 
     [HttpGet("streak")]
     public async Task<IActionResult> Streak()
-        => Ok(await _service.GetStreakAsync(GetUserId()));
+        => Ok(await _skinLogs.GetStreakAsync(GetUserId()));
 
     [HttpGet("progress")]
     public async Task<IActionResult> Progress([FromQuery] string? from, [FromQuery] string? to)
     {
         var fromDt = from != null ? DateTime.Parse(from).ToUniversalTime() : DateTime.UtcNow.AddDays(-29);
-        var toDt = to != null ? DateTime.Parse(to).ToUniversalTime() : DateTime.UtcNow;
-        return Ok(await _service.GetProgressAsync(GetUserId(), fromDt, toDt));
+        var toDt   = to   != null ? DateTime.Parse(to).ToUniversalTime()   : DateTime.UtcNow;
+        return Ok(await _skinLogs.GetProgressAsync(GetUserId(), fromDt, toDt));
     }
 }
 
-// ── Users (Admin) ─────────────────────────────────────────────────────────────
+// ── Users Controller (Admin) ──────────────────────────────────────────────────
+// Injects ONLY: IUserService
 [ApiController]
 [Route("api/users")]
 [Authorize(Roles = "Admin")]
-public class UsersApiController : ControllerBase
+public class UsersController : ControllerBase
 {
-    private readonly IUserRepository _users;
-    public UsersApiController(IUserRepository users) => _users = users;
+    private readonly IUserService _users;
+
+    public UsersController(IUserService users) => _users = users;
 
     [HttpGet]
-    public async Task<IActionResult> GetAll()
-    {
-        var users = (await _users.GetAllAsync())
-            .Select(u => new UserDto(u.Id, u.Name, u.Email, u.Role, u.SkinType, u.SkinConcerns, u.CreatedAt));
-        return Ok(users);
-    }
+    public async Task<IActionResult> GetAll() => Ok(await _users.GetAllAsync());
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)

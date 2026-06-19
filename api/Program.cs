@@ -21,6 +21,7 @@ builder.Services.AddScoped<ISkinLogRepository, SkinLogRepository>();
 builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IRoutineService, RoutineService>();
 builder.Services.AddScoped<ISkinLogService, SkinLogService>();
@@ -54,13 +55,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactApp", policy =>
     {
-        policy.WithOrigins(
-            "http://localhost:5173",
-            "http://localhost:3000",
-            "https://skincare-tracker-soa.vercel.app"
-        )
-        .AllowAnyHeader()
-        .AllowAnyMethod();
+        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
     });
 });
 

@@ -2,6 +2,11 @@ using SkincareTracker.API.Models;
 
 namespace SkincareTracker.API.Interfaces;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REPOSITORY INTERFACES
+// Used ONLY by Services — Controllers must never inject these directly.
+// ─────────────────────────────────────────────────────────────────────────────
+
 public interface IUserRepository
 {
     Task<User?> GetByIdAsync(int id);
@@ -53,10 +58,22 @@ public interface ISkinLogRepository
     Task DeleteAsync(int id);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SERVICE INTERFACES
+// These are the ONLY interfaces that Controllers may inject.
+// ─────────────────────────────────────────────────────────────────────────────
+
 public interface IAuthService
 {
-    Task<string?> AuthenticateAsync(string email, string password);
     Task<bool> RegisterAsync(string name, string email, string password, string skinType, string skinConcerns);
+    Task<DTOs.AuthResponseDto?> LoginAsync(string email, string password);
+    Task<DTOs.UserDto?> GetCurrentUserAsync(int userId);
+}
+
+public interface IUserService
+{
+    Task<IEnumerable<DTOs.UserDto>> GetAllAsync();
+    Task DeleteAsync(int id);
 }
 
 public interface IProductService
